@@ -1,48 +1,127 @@
+import EventEmitter from 'events';
+
 /**
- * Dummy implementation of Storage interface with empty methods.
+ * Dummy implementation of Storage interface.
  */
-class DummyLocalStorage {
-    /* eslint-disable no-empty-function */
-    /**
-     * Empty function
-     */
-    getItem() { }
+class DummyLocalStorage extends EventEmitter {
+
+    _storage = new Map();
 
     /**
-     * Empty function
+     * Empties all keys out of the storage.
+     *
+     * @returns {void}
      */
-    setItem() { }
+    clear() {
+        this._storage.clear();
+    }
 
     /**
-     * Empty function
+     * Returns the number of data items stored in the Storage object.
+     *
+     * @returns {number} - The number of data items stored in the Storage object.
      */
-    removeItem() { }
+    get length() {
+        return this._storage.size;
+    }
 
     /**
-     * Empty function
+     * Will return that key's value associated to the passed key name.
+     *
+     * @param {string} keyName - The key name.
+     * @returns {*} - The key value.
      */
-    key() { }
-    /* eslint-enable no-empty-function */
+    getItem(keyName) {
+        return this._storage.get(keyName);
+    }
+
+    /**
+     * When passed a key name and value, will add that key to the storage,
+     * or update that key's value if it already exists.
+     *
+     * @param {string} keyName - The key name.
+     * @param {*} keyValue - The key value.
+     * @returns {void}
+     */
+    setItem(keyName, keyValue) {
+        this._storage.set(keyName, keyValue);
+    }
+
+    /**
+     * When passed a key name, will remove that key from the storage.
+     *
+     * @param {string} keyName - The key name.
+     * @returns {void}
+     */
+    removeItem(keyName) {
+        this._storage.delete(keyName);
+    }
+
+    /**
+     * When passed a number n, this method will return the name of the nth key in the storage.
+     *
+     * @param {number} idx - The index of the key.
+     * @returns {string} - The nth key name.
+     */
+    key(n) {
+        const iterator = this._storage.keys();
+        let result = {};
+
+        for (let i = 0; i <= n && result.done !== true; i++) {
+            result = iterator.next();
+        }
+
+        return result.value;
+    }
 }
 
 /**
  * Wrapper class for browser's local storage object.
  */
-class JitsiLocalStorage extends DummyLocalStorage {
+class JitsiLocalStorage extends EventEmitter {
     /**
      * @constructor
      * @param {Storage} storage browser's local storage object.
      */
     constructor() {
         super();
-        let storage;
 
         try {
-            storage = window.localStorage;
+            this._storage = window.localStorage;
+            this._localStorageDisabled = false;
         } catch (error) {
-            // do nothing
+            console.warn('Local storage is disabled.');
+            this._storage = new DummyLocalStorage();
+            this._localStorageDisabled = true;
         }
-        this.storage = storage || new DummyLocalStorage();
+    }
+
+    /**
+     * Returns true if window.localStorage is disabled and false otherwise.
+     *
+     * @returns {boolean} - True if window.localStorage is disabled and false otherwise.
+     */
+    isLocalStorageDisabled() {
+        return this._localStorageDisabled;
+    }
+
+    /**
+     * Empties all keys out of the storage.
+     *
+     * @returns {void}
+     */
+    clear() {
+        this.emit('changed');
+        this._storage.clear();
+    }
+
+    /**
+     * Returns the number of data items stored in the Storage object.
+     *
+     * @returns {number} - The number of data items stored in the Storage object.
+     */
+    get length() {
+        return this._storage.length;
     }
 
     /**
@@ -53,17 +132,22 @@ class JitsiLocalStorage extends DummyLocalStorage {
      * null is returned.
      */
     getItem(keyName) {
-        return this.storage.getItem(keyName);
+        return this._storage.getItem(keyName);
     }
 
     /**
      * Adds a key to the storage, or update key's value if it already exists.
-     * @param {string} keyName the name of the key you want to create/update.
-     * @param {string} keyValue the value you want to give the key you are
+     * @param {string} keyName - the name of the key you want to create/update.
+     * @param {string} keyValue - the value you want to give the key you are
      * creating/updating.
+     * @param {boolean} dontEmitChangedEvent - If true a changed event won't be emitted.
      */
-    setItem(keyName, keyValue) {
-        return this.storage.setItem(keyName, keyValue);
+    setItem(keyName, keyValue, dontEmitChangedEvent = false) {
+        if (!dontEmitChangedEvent) {
+            this.emit('changed');
+        }
+
+        return this._storage.setItem(keyName, keyValue);
     }
 
     /**
@@ -71,7 +155,9 @@ class JitsiLocalStorage extends DummyLocalStorage {
      * @param {string} keyName the name of the key you want to remove.
      */
     removeItem(keyName) {
-        return this.storage.removeItem(keyName);
+        this.emit('changed');
+
+        return this._storage.removeItem(keyName);
     }
 
     /**
@@ -82,7 +168,7 @@ class JitsiLocalStorage extends DummyLocalStorage {
      * @returns {string}
      */
     key(i) {
-        return this.storage.key(i);
+        return this._storage.key(i);
     }
 }
 
